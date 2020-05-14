@@ -437,7 +437,8 @@ static const char *opsmenu[] = {
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
 	"[q]       Quit and shut down        ",
-	NULL
+	"[dth]     enable debug mess - DB THREADS   ",
+    NULL
 };
 
 static
@@ -659,7 +660,7 @@ static
 void
 menu_execute(char *line, int isargs)
 {
-	char *command;
+	cha*command;
 	char *context;
 	int result;
 
