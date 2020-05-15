@@ -521,6 +521,13 @@ cmd_mainmenu(int n, char **a)
 	return 0;
 }
 
+static int cmd_dth(int nargs, char **args) {
+    (void)nargs;
+    (void)args;
+    dbflags = 0x0010;
+    return 0;
+}
+
 ////////////////////////////////////////
 //
 // Command table.
@@ -550,6 +557,8 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+  { "dth",    cmd_dth  }, /*For debugging flag of DB-THREADS */
+  
 
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */
@@ -649,6 +658,7 @@ cmd_dispatch(char *cmd)
 	return EINVAL;
 }
 
+
 /*
  * Evaluate a command line that may contain multiple semicolon-delimited
  * commands.
@@ -660,7 +670,7 @@ static
 void
 menu_execute(char *line, int isargs)
 {
-	cha*command;
+	char *command;
 	char *context;
 	int result;
 
