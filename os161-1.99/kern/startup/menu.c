@@ -437,7 +437,8 @@ static const char *opsmenu[] = {
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
 	"[q]       Quit and shut down        ",
-	NULL
+	"[dth]     enable debug mess - DB THREADS   ",
+    NULL
 };
 
 static
@@ -520,6 +521,13 @@ cmd_mainmenu(int n, char **a)
 	return 0;
 }
 
+static int cmd_dth(int nargs, char **args) {
+    (void)nargs;
+    (void)args;
+    dbflags = 0x0010;
+    return 0;
+}
+
 ////////////////////////////////////////
 //
 // Command table.
@@ -549,6 +557,8 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+  { "dth",    cmd_dth  }, /*For debugging flag of DB-THREADS */
+  
 
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */
@@ -647,6 +657,7 @@ cmd_dispatch(char *cmd)
 	kprintf("%s: Command not found\n", args[0]);
 	return EINVAL;
 }
+
 
 /*
  * Evaluate a command line that may contain multiple semicolon-delimited
