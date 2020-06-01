@@ -223,11 +223,11 @@ lock_release(struct lock *lock)
     KASSERT(lock != NULL);
     KASSERT(lock_do_i_hold(lock));
 
-    spinlock(@lock->lk_spin);
     spinlock_acquire(&lock->lk_spin);
     lock->locked = false;
     lock->owner = NULL;
     wchan_wakeone(lock->lk_wchan);
+    spinlock_release(&lock->lk_spin);
 }
 
 bool
