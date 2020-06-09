@@ -173,8 +173,8 @@ lock_create(const char *name)
 	}
 
 	spinlock_init(&lock->lk_spin);
-    lock->locked = false;
-    lock->owner = NULL;
+        lock->locked = false;
+        lock->owner = NULL;
         
         return lock;
 }
@@ -204,16 +204,16 @@ lock_acquire(struct lock *lock)
     spinlock_acquire(&lock->lk_spin);
         
     while (lock->locked) {
-	    wchan_lock(lock->lk_wchan);
-	    spinlock_release(&lock->lk_spin);
+	wchan_lock(lock->lk_wchan);
+	spinlock_release(&lock->lk_spin);
         wchan_sleep(lock->lk_wchan);
 
-	    spinlock_acquire(&lock->lk_spin);
+	spinlock_acquire(&lock->lk_spin);
     }
 
     lock->locked = true;
     lock->owner = curthread;
-	spinlock_release(&lock->lk_spin);
+    spinlock_release(&lock->lk_spin);
 
 }
 

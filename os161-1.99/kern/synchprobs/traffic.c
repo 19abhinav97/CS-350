@@ -1,4 +1,4 @@
-/*
+  /*
  * traffic.c
  *
  * 09-2015: KMS: created
@@ -64,7 +64,7 @@ static struct semaphore *SimulationWait;
  * note: this is state should be used only by the 
  *  functions in this file, hence the static declarations
  *
- */
+ */ 
 
 /* note: this typedef is defined here because it is used only
    within this file, and is not exposed externally */
