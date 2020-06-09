@@ -31,6 +31,13 @@ int volatile vehicles_inside_intersection;
 static int directionArray[4];
 static volatile int number_of_cars[4];
 
+// static struct queue vehicle_q;
+// typedef struct Vehicles
+// {
+//   Direction origin;
+//   Direction destination;
+// } v_car;
+
 /* 
  * The simulation driver will call this function once before starting
  * the simulation
@@ -63,6 +70,7 @@ intersection_sync_init(void)
   if (west_cv == NULL) {
     panic("could not create West CV");
   }
+  
   
   for(int i = 0 ; i < 4; i ++) directionArray[i] = 0;
   for(int i = 0 ; i < 4; i ++) number_of_cars[i] = 0;
@@ -112,6 +120,9 @@ intersection_before_entry(Direction origin, Direction destination)
   lock_acquire(intersectionLock);
   number_of_cars[origin] += 1;
 
+  // v_car.origin = origin;
+  // v_car.destination = destination;
+
   if (origin == north) {
     if (directionArray[1] || directionArray[2] || directionArray[3]) {
       cv_wait(north_cv, intersectionLock);
@@ -141,7 +152,7 @@ intersection_before_entry(Direction origin, Direction destination)
   lock_release(intersectionLock);
 }
 
-static int max_index(int a[4]) {
+int max_index(int a[4]) {
   int temp = 0;
   int index = -1;
   for (int i = 0; i < 4; ++i) {
