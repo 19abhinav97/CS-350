@@ -5,8 +5,8 @@
 enum Directions
   { 
     north = 0,
-    east = 1,
-    south = 2,
+    east = 2,
+    south = 1,
     west = 3
   };
 typedef enum Directions Direction;
@@ -17,6 +17,7 @@ void intersection_sync_init(void);
 void intersection_sync_cleanup(void);
 void intersection_before_entry(Direction origin, Direction destination);
 void intersection_after_exit(Direction origin, Direction destination);
+static int max_index(int a[4]);
 
 /* student-implemented functions for the cat/mouse problem */
 

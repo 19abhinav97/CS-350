@@ -27,9 +27,9 @@ static struct cv *north_cv;
 static struct cv *south_cv;
 static struct cv *east_cv;
 static struct cv *west_cv;
-int vehicles_inside_intersection;
+int volatile vehicles_inside_intersection;
 static int directionArray[4];
-static int number_of_cars[4];
+static volatile int number_of_cars[4];
 
 /* 
  * The simulation driver will call this function once before starting
@@ -44,23 +44,22 @@ intersection_sync_init(void)
   /* replace this default implementation with your own implementation */
   
   intersectionLock = lock_create("intersectionLock");
-  north_cv = cv_create("north");
-  south_cv = cv_create("south");
-  east_cv = cv_create("east");
-  west_cv = cv_create("west");
-
   if (intersectionLock == NULL) {
     panic("could not create intersection Lock");
   }
+  north_cv = cv_create("north");
   if (north_cv == NULL) {
     panic("could not create North CV");
   }
+  south_cv = cv_create("south");
   if (south_cv == NULL) {
     panic("could not create South CV");
   }
+  east_cv = cv_create("east");
   if (east_cv == NULL) {
     panic("could not create East CV");
   }
+  west_cv = cv_create("west");
   if (west_cv == NULL) {
     panic("could not create West CV");
   }
@@ -107,69 +106,44 @@ intersection_sync_cleanup(void)
 void
 intersection_before_entry(Direction origin, Direction destination) 
 {
-  // /* replace this default implementation with your own implementation */
-  // (void)origin;  /* avoid compiler complaint about unused parameter */
-  (void)destination; /* avoid compiler complaint about unused parameter */
-  // KASSERT(intersectionSem != NULL);
-  // P(intersectionSem);
-  // kprintf("hello");
-  lock_acquire(intersectionLock);
-  kprintf("Car attempted to enter from %d\n", origin);
-  if (origin == north) {
-    
-    number_of_cars[0] += 1;
+  (void)destination;
+  KASSERT(intersectionLock != NULL);
 
+  lock_acquire(intersectionLock);
+  number_of_cars[origin] += 1;
+
+  if (origin == north) {
     if (directionArray[1] || directionArray[2] || directionArray[3]) {
       cv_wait(north_cv, intersectionLock);
     }
     directionArray[0] = 1;
   }
   if (origin == south) {
-    
-    number_of_cars[1] += 1;
-
-    if ((directionArray[0] != 0) || (directionArray[2] != 0) || (directionArray[3] != 0)) {
+    if (directionArray[0] || directionArray[2] || directionArray[3]) {
       cv_wait(south_cv, intersectionLock);
     }
     directionArray[1] = 1;
-    
   }
   if (origin == east) {
-    
-    number_of_cars[2] += 1;
-
     if ((directionArray[0] != 0) || (directionArray[1] != 0) || (directionArray[3] != 0)) {
       cv_wait(east_cv, intersectionLock);
     }
     directionArray[2] = 1;
-    
   }
   if (origin == west) {
-
-    number_of_cars[3] += 1;
-
     if ((directionArray[0] != 0) || (directionArray[1] != 0) || (directionArray[2] != 0)) {
       cv_wait(west_cv, intersectionLock);
     }
     directionArray[3] = 1;
-    
   }
+  number_of_cars[origin]-=1;
   vehicles_inside_intersection+=1;
-  kprintf("Car entered from %d\n", origin);
   lock_release(intersectionLock);
 }
 
-int max_value(int a[4]) {
-  int temp = a[0];
-  for (int i = 0; i < 4; ++i) {
-    if (a[i] > temp) temp = a[i];
-  }
-  return temp;
-}
-
-int max_index(int a[4]) {
-  int temp = a[0];
-  int index = 0;
+static int max_index(int a[4]) {
+  int temp = 0;
+  int index = -1;
   for (int i = 0; i < 4; ++i) {
     if (a[i] > temp) {
       temp = a[i];
@@ -193,89 +167,112 @@ int max_index(int a[4]) {
 void
 intersection_after_exit(Direction origin, Direction destination) 
 {
-  /* replace this default implementation with your own implementation */
-  // (void)origin;  /* avoid compiler complaint about unused parameter */
   (void)destination; /* avoid compiler complaint about unused parameter */
   KASSERT(intersectionLock != NULL);
   lock_acquire(intersectionLock);
-  kprintf("Car left from %d\n", origin);
+
   if (origin == north) {
     
     if (directionArray[1] == 0 || directionArray[2] == 0 || directionArray[3] == 0)
     {
       
-      kprintf("North exit\n");
       vehicles_inside_intersection-=1;
-      number_of_cars[0] -= 1;
       if(vehicles_inside_intersection == 0){
+        directionArray[0] = 0;
         
-        int temp1 = max_value(number_of_cars);
-        int temp2 = max_index(number_of_cars);
+        int index = max_index(number_of_cars);
 
-        directionArray[1] = 1;
-        cv_signal(south_cv, intersectionLock);
+        if (index == 1) {
+          directionArray[1] = 1;
+          cv_broadcast(south_cv, intersectionLock);
+        }
+        if (index == 2) {
+          directionArray[2] = 1;
+          cv_broadcast(east_cv, intersectionLock);
+        }
+        if (index == 3) {
+          directionArray[3] = 1;
+          cv_broadcast(west_cv, intersectionLock);
+        }
       }
-       
-      directionArray[0] = 0;
     }
-
-    
   }
 
   if (origin == south) {
     
     if (directionArray[0] == 0 || directionArray[2] == 0 || directionArray[3] == 0) {
-      kprintf("South exit\n");
-
+      
       vehicles_inside_intersection-=1;
-      number_of_cars[1] -= 1;
       if(vehicles_inside_intersection == 0){
-        // change signal
-        directionArray[2] = 1;
-        cv_signal(east_cv, intersectionLock);
-      }
-
-      //cv_signal(south_cv, intersectionLock);
       directionArray[1] = 0;
-    }
+        
+        int index = max_index(number_of_cars);
 
+        if (index == 0) {
+          directionArray[0] = 1;  
+          cv_broadcast(north_cv, intersectionLock);
+        }
+        if (index == 2) {
+          directionArray[2] = 1;
+          cv_broadcast(east_cv, intersectionLock);
+        }
+        if (index == 3) {
+          directionArray[3] = 1;
+          cv_broadcast(west_cv, intersectionLock);
+        }
+      }
+    }
   }
 
   if (origin == east) {
     
     if (directionArray[1] == 0 || directionArray[0] == 0 || directionArray[3] == 0) {
-      kprintf("east exit\n");
 
       vehicles_inside_intersection-=1;
-      number_of_cars[2] -= 1;
       if(vehicles_inside_intersection == 0){
-        // change signal
-        directionArray[3] = 1;
-        cv_signal(west_cv, intersectionLock);
-      }
+        directionArray[2] = 0;
+        int index = max_index(number_of_cars);
 
-      // cv_signal(east_cv, intersectionLock);
-      directionArray[2] = 0;
+        if (index == 1) {
+          directionArray[1] = 1;
+          cv_broadcast(south_cv, intersectionLock);
+        }
+        if (index == 0) {
+          directionArray[0] = 1;
+          cv_broadcast(north_cv, intersectionLock);
+        }
+        if (index == 3) {
+          directionArray[3] = 1;
+          cv_broadcast(west_cv, intersectionLock);
+        }
+      }
     }
   }
 
   if (origin == west) {
     
     if (directionArray[1] == 0 || directionArray[2] == 0 || directionArray[0] == 0) {
-      kprintf("west exit\n");
 
       vehicles_inside_intersection-=1;
-      number_of_cars[3] -= 1;
       if(vehicles_inside_intersection == 0){
-        // change signal
-        directionArray[0] = 1;
-        cv_signal(north_cv, intersectionLock);
-      }
+        directionArray[3] = 0;
+        
+        int index = max_index(number_of_cars);
 
-      // cv_signal(west_cv, intersectionLock);
-      directionArray[3] = 0;
+        if (index == 1) {
+          directionArray[1] = 1;
+          cv_broadcast(south_cv, intersectionLock);
+        }
+        if (index == 2) {
+          directionArray[2] = 1;
+          cv_broadcast(east_cv, intersectionLock);
+        }
+        if (index == 0) {
+          directionArray[0] = 1;
+          cv_broadcast(north_cv, intersectionLock);
+        }
+      }
     }
   }
   lock_release(intersectionLock);
-  
 }
