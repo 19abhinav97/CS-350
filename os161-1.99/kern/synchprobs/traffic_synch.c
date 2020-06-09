@@ -152,7 +152,7 @@ intersection_before_entry(Direction origin, Direction destination)
   lock_release(intersectionLock);
 }
 
-int max_index(int a[4]) {
+int max_index(int a[]) {
   int temp = 0;
   int index = -1;
   for (int i = 0; i < 4; ++i) {

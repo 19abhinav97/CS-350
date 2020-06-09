@@ -17,7 +17,7 @@ void intersection_sync_init(void);
 void intersection_sync_cleanup(void);
 void intersection_before_entry(Direction origin, Direction destination);
 void intersection_after_exit(Direction origin, Direction destination);
-int max_index(int a[4]);
+int max_index(int a[]);
 
 /* student-implemented functions for the cat/mouse problem */
 
