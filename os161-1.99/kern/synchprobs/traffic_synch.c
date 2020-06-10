@@ -28,8 +28,8 @@ static struct cv *south_cv;
 static struct cv *east_cv;
 static struct cv *west_cv;
 int volatile vehicles_inside_intersection;
-static int directionArray[4];
-static volatile int number_of_cars[4];
+int directionArray[4];
+volatile int number_of_cars[4];
 
 // static struct queue vehicle_q;
 // typedef struct Vehicles
@@ -152,7 +152,7 @@ intersection_before_entry(Direction origin, Direction destination)
   lock_release(intersectionLock);
 }
 
-int max_index(int a[]) {
+int max_index(volatile int a[]) {
   int temp = 0;
   int index = -1;
   for (int i = 0; i < 4; ++i) {
