@@ -1,5 +1,5 @@
 #bin/bash
-
+# A2
 
 if [ -z "$1" ]; then
     echo "Usage:"
