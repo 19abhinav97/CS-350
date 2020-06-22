@@ -9,6 +9,8 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include "opt-A2.h"
+#include <mips/trapframe.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -92,3 +94,52 @@ sys_waitpid(pid_t pid,
   return(0);
 }
 
+#if OPT_A2
+
+int sys_fork(struct trapframe *tf, pid_t *retval) {
+
+  struct proc *childProcess = proc_create_runprogram("childProcess"); // Add name here
+
+  if (childProcess == NULL) {
+    // return error code - enomem no memory left
+    return ENOMEM;
+  }
+
+  struct addrspace *childAddrspace;
+  struct addrspace *currentAddrspace = curproc_getas();
+
+  int valueAddSpace = as_copy(currentAddrspace, &childAddrspace);
+
+  if (valueAddSpace != 0) {
+    // error code here
+    return ENOMEM;
+  }
+
+  // Now attach this address space to the this child
+  spinlock_acquire(&childProcess->p_lock);
+	childProcess->p_addrspace = childAddrspace;
+	
+  // Assign PID;
+  pid_t a = incrementProcessId();
+  childProcess->process_id = a;
+
+  // Assigning parent process pointer
+  childProcess->parentProcessPointer = curproc;
+  
+  // Adding this child process to the parent's prcoess child array
+  array_add(childProcess->numberofChildProcess, childProcess, NULL);
+
+  spinlock_release(&childProcess->p_lock);
+
+  struct trapframe *child_tf = kmalloc(sizeof(struct trapframe));
+  memcpy(child_tf, tf, sizeof(struct trapframe));
+
+
+  thread_fork("childProcessThread", childProcess, (void *)&enter_forked_process, child_tf, 0);
+
+  *retval = childProcess->process_id;
+  return 0;
+
+}
+
+#endif

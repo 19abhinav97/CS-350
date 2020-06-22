@@ -50,6 +50,8 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <array.h>
+#include "opt-A2.h"
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -69,7 +71,11 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
+// For global process id
+static volatile pid_t globalProcessIdNumber;
 
+#endif
 
 /*
  * Create a proc structure.
@@ -102,6 +108,14 @@ proc_create(const char *name)
 #ifdef UW
 	proc->console = NULL;
 #endif // UW
+
+#if OPT_A2
+
+proc->parentProcessPointer = NULL;
+proc->numberofChildProcess = array_create();
+
+
+#endif
 
 	return proc;
 }
@@ -208,6 +222,13 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
+#if OPT_A2
+
+globalProcessIdNumber = 1;
+
+#endif
+
 }
 
 /*
@@ -364,3 +385,14 @@ curproc_setas(struct addrspace *newas)
 	spinlock_release(&proc->p_lock);
 	return oldas;
 }
+
+#if OPT_A2
+
+pid_t incrementProcessId(void) {
+	++globalProcessIdNumber;
+	return globalProcessIdNumber;
+}
+
+#endif
+
+
