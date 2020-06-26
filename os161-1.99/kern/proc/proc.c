@@ -116,7 +116,6 @@ proc_create(const char *name)
 if (firstprocess) {
 	proc->process_id = globalProcessIdNumber;
 	++globalProcessIdNumber;
-	// proc->parentProcessPointer = NULL;
 } else {
 	lock_acquire(global_lock);
 	proc->process_id = globalProcessIdNumber;
@@ -124,7 +123,6 @@ if (firstprocess) {
 	lock_release(global_lock);
 }
 
-// proc->exit_code = ?; // What shoudl be this?
 proc->parentProcessPointer = NULL;
 proc->numberofChildProcess = array_create();
 proc->lock_child = lock_create("lock_child");
@@ -166,28 +164,6 @@ proc_destroy(struct proc *proc)
 		proc->p_cwd = NULL;
 	}
 
-#if OPT_A2
-	
-	lock_acquire(proc->lock_child);
-
-	for (int i = array_num(proc->numberofChildProcess) - 1;  i >= 0; i--) {
-		struct proc *children_p = array_get(proc->numberofChildProcess, i);
-		children_p->parentProcessPointer = NULL;
-		if (children_p->process_terminated) {
-			proc_destroy(children_p);
-		}
-		array_remove(proc->numberofChildProcess, i);
-	}
-	array_setsize(proc->numberofChildProcess, 0);
-	array_destroy(proc->numberofChildProcess);
-	lock_release(proc->lock_child);
-
-	// Destroy cv, array, lock and
-	lock_destroy(proc->lock_child);
-	cv_destroy(proc->cv_child);
-
-#endif
-
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here
 	if (proc->p_addrspace) {
 		/*
@@ -214,11 +190,35 @@ proc_destroy(struct proc *proc)
 	}
 #endif // UW
 
+#if OPT_A2
+	
+	lock_acquire(proc->lock_child);
+	struct proc *children_p = NULL;
+	struct array *proc_children = proc->numberofChildProcess;
+	int size_array = array_num(proc_children);
+	for (int i = size_array - 1;  i >= 0; i--) {
+		children_p = array_get(proc_children, i);
+		if (children_p->process_terminated) {
+			proc_destroy(children_p);
+		}
+		children_p->parentProcessPointer = NULL;
+		array_remove(proc_children, i);
+	}
+	array_destroy(proc_children);
+	lock_release(proc->lock_child);
+
+	// Destroy cv, array, lock and
+	cv_destroy(proc->cv_child);
+	lock_destroy(proc->lock_child);
+
+#endif
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
 	kfree(proc->p_name);
 	kfree(proc);
+
 
 #ifdef UW
 	/* decrement the process count */

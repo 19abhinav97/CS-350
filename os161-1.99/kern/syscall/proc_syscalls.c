@@ -16,6 +16,46 @@
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
+
+static void sys_exit_helper (struct proc *p) {
+  
+  long int size_array = array_num(p->numberofChildProcess) - 1;
+  int counter = 0;
+  int true_counter = 0;
+  int false_counter = 0;
+  int temporary = 10;
+  int switch_case = 1;
+
+  while (true) {
+
+      if (size_array < 0) {
+        break;
+      }
+
+      struct proc *temp = array_get(p->numberofChildProcess, size_array);
+      temp->parentProcessPointer = NULL;
+
+      switch(temp->process_terminated) {
+        switch_case = true_counter * temporary;
+        case true:
+          true_counter = true_counter + 1;
+          // kprintf("true_counter = %d",  true_counter);
+          proc_destroy(temp);
+          break;
+        case false:
+          false_counter = false_counter + 1;
+          // What to do here? Add later
+          break;
+      } 
+      switch_case = switch_case + 1;
+      array_remove(p->numberofChildProcess, size_array);
+      counter = counter + 1;
+      // kprintf("counter = %d",  counter);
+      size_array = size_array - 1;
+  }
+
+}
+
 void sys__exit(int exitcode) {
 
   struct addrspace *as;
@@ -26,36 +66,15 @@ void sys__exit(int exitcode) {
 
   #if OPT_A2
 
-  // if (curproc->parentProcessPointer != NULL) {
-
-  //   curproc->code_exit = _MKWAIT_EXIT(exitcode);
-
-  //   lock_acquire(curproc->lock_waitexit);
-  //   cv_signal(curproc->cv_waitexit, curproc->parentProcessPointer->lock_waitexit);
-  //   lock_release(curproc->lock_waitexit);
-  // }
-
   if (curproc->parentProcessPointer != NULL) {
 
 
     lock_acquire(curproc->lock_child);
     curproc->process_terminated = true;
-    curproc->exit_code = exitcode;
-    struct proc *temp = NULL;
-
-    for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
-      temp = array_get(curproc->numberofChildProcess, i);
-      temp->parentProcessPointer = NULL;
-      if (temp->process_terminated) {
-        proc_destroy(temp);
-      }
-      array_remove(curproc->numberofChildProcess, i);
-    }
-    
+    sys_exit_helper(curproc);
     lock_release(curproc->lock_child);
-
+    curproc->exit_code = exitcode;
     cv_signal(curproc->cv_child, curproc->parentProcessPointer->lock_child);
-    
 
   }
 
@@ -82,8 +101,14 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  if(!p->parentProcessPointer) proc_destroy(p);
-  
+
+#if OPT_A2
+  if(!p->parentProcessPointer) {
+    proc_destroy(p);
+  }
+#endif
+
+    
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
   panic("return from thread_exit in sys_exit\n");
@@ -124,52 +149,39 @@ sys_waitpid(pid_t pid,
      Fix this!
   */
 
-  if (options != 0) {
-    return(EINVAL);
-  }
-
   #if OPT_A2
 
 
   lock_acquire(curproc->lock_child);
-  bool child_exists = false;
+   
+  unsigned int size_array = array_num(curproc->numberofChildProcess);
 
-  struct proc *childp = NULL;
-
-  for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
-    childp =  array_get(curproc->numberofChildProcess, i);
+  for (unsigned int i = 0; i <= size_array - 1; i++) {
+    struct proc *childp = array_get(curproc->numberofChildProcess, i);
     
     if (childp->process_id == pid) {
-      child_exists = true;
-      break;
+      if (childp->process_terminated == false) {
+        while (true) {
+          if (childp->process_terminated) {
+            break;
+          }
+          cv_wait(childp->cv_child, curproc->lock_child);        
+        }
+        exitstatus = _MKWAIT_EXIT(childp->exit_code);
+      } else {
+        exitstatus = _MKWAIT_EXIT(childp->exit_code);
+      }
     }
-  } 
-
-  if (!child_exists) {
-    // No child process with this PID exists for the curthread
-    lock_release(curproc->lock_child);
-    return EINVAL;
-  }
-
-  if (childp->process_terminated) {
-    exitstatus = _MKWAIT_EXIT(childp->exit_code);
-  } else {
-
-    while (!childp->process_terminated) {
-      cv_wait(childp->cv_child, curproc->lock_child);        
-    }
-
-    exitstatus = _MKWAIT_EXIT(childp->exit_code);
-  }
     
-
+  }
 
   lock_release(curproc->lock_child);
 
-
 #endif
 
-
+  if (options != 0) {
+    return(EINVAL);
+  }
   /* for now, just pretend the exitstatus is 0 */
   // exitstatus = 0;
   result = copyout((void *)&exitstatus,status,sizeof(int));
