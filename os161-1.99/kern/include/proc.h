@@ -75,8 +75,11 @@ struct proc {
 	pid_t process_id;
 	struct proc *parentProcessPointer;
 	struct array *numberofChildProcess;
-
 	struct lock *lock_child;
+	struct cv *cv_child;
+	bool process_terminated;
+	int exit_code;
+
 
 };
 

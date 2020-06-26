@@ -116,7 +116,7 @@ proc_create(const char *name)
 if (firstprocess) {
 	proc->process_id = globalProcessIdNumber;
 	++globalProcessIdNumber;
-	proc->parentProcessPointer = NULL;
+	// proc->parentProcessPointer = NULL;
 } else {
 	lock_acquire(global_lock);
 	proc->process_id = globalProcessIdNumber;
@@ -124,11 +124,12 @@ if (firstprocess) {
 	lock_release(global_lock);
 }
 
-
+// proc->exit_code = ?; // What shoudl be this?
 proc->parentProcessPointer = NULL;
 proc->numberofChildProcess = array_create();
 proc->lock_child = lock_create("lock_child");
-
+proc->cv_child = cv_create("cv_child");
+proc->process_terminated = false;
 
 #endif
 
@@ -165,6 +166,27 @@ proc_destroy(struct proc *proc)
 		proc->p_cwd = NULL;
 	}
 
+#if OPT_A2
+	
+	lock_acquire(proc->lock_child);
+
+	for (int i = array_num(proc->numberofChildProcess) - 1;  i >= 0; i--) {
+		struct proc *children_p = array_get(proc->numberofChildProcess, i);
+		children_p->parentProcessPointer = NULL;
+		if (children_p->process_terminated) {
+			proc_destroy(children_p);
+		}
+		array_remove(proc->numberofChildProcess, i);
+	}
+	array_setsize(proc->numberofChildProcess, 0);
+	array_destroy(proc->numberofChildProcess);
+	lock_release(proc->lock_child);
+
+	// Destroy cv, array, lock and
+	lock_destroy(proc->lock_child);
+	cv_destroy(proc->cv_child);
+
+#endif
 
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here
 	if (proc->p_addrspace) {
@@ -213,11 +235,8 @@ proc_destroy(struct proc *proc)
 	V(proc_count_mutex);
 #endif // UW
 	
-#if OPT_A2
 
-	// lock_destroy(proc->lock_child);
 
-#endif
 }
 
 /*
@@ -226,12 +245,18 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+#if OPT_A2
   firstprocess = true;
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
   }
+#if OPT_A2
   firstprocess = false;
+#endif
+
 #ifdef UW
   proc_count = 0;
   proc_count_mutex = sem_create("proc_count_mutex",1);

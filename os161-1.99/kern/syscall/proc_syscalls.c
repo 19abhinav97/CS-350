@@ -22,7 +22,45 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
-  (void)exitcode;
+  // (void)exitcode;
+
+  #if OPT_A2
+
+  // if (curproc->parentProcessPointer != NULL) {
+
+  //   curproc->code_exit = _MKWAIT_EXIT(exitcode);
+
+  //   lock_acquire(curproc->lock_waitexit);
+  //   cv_signal(curproc->cv_waitexit, curproc->parentProcessPointer->lock_waitexit);
+  //   lock_release(curproc->lock_waitexit);
+  // }
+
+  if (curproc->parentProcessPointer != NULL) {
+
+
+    lock_acquire(curproc->lock_child);
+    curproc->process_terminated = true;
+    curproc->exit_code = exitcode;
+    struct proc *temp = NULL;
+
+    for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
+      temp = array_get(curproc->numberofChildProcess, i);
+      temp->parentProcessPointer = NULL;
+      if (temp->process_terminated) {
+        proc_destroy(temp);
+      }
+      array_remove(curproc->numberofChildProcess, i);
+    }
+    
+    lock_release(curproc->lock_child);
+
+    cv_signal(curproc->cv_child, curproc->parentProcessPointer->lock_child);
+    
+
+  }
+
+#endif
+
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
@@ -44,7 +82,7 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  proc_destroy(p);
+  if(!p->parentProcessPointer) proc_destroy(p);
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
@@ -89,8 +127,51 @@ sys_waitpid(pid_t pid,
   if (options != 0) {
     return(EINVAL);
   }
+
+  #if OPT_A2
+
+
+  lock_acquire(curproc->lock_child);
+  bool child_exists = false;
+
+  struct proc *childp = NULL;
+
+  for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
+    childp =  array_get(curproc->numberofChildProcess, i);
+    
+    if (childp->process_id == pid) {
+      child_exists = true;
+      break;
+    }
+  } 
+
+  if (!child_exists) {
+    // No child process with this PID exists for the curthread
+    lock_release(curproc->lock_child);
+    return EINVAL;
+  }
+
+  if (childp->process_terminated) {
+    exitstatus = _MKWAIT_EXIT(childp->exit_code);
+  } else {
+
+    while (!childp->process_terminated) {
+      cv_wait(childp->cv_child, curproc->lock_child);        
+    }
+
+    exitstatus = _MKWAIT_EXIT(childp->exit_code);
+  }
+    
+
+
+  lock_release(curproc->lock_child);
+
+
+#endif
+
+
   /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
+  // exitstatus = 0;
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
     return(result);
