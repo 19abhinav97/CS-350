@@ -74,6 +74,8 @@ struct semaphore *no_proc_sem;
 #if OPT_A2
 // For global process id
 static volatile pid_t globalProcessIdNumber;
+static struct lock *global_lock;
+static bool firstprocess;
 
 #endif
 
@@ -111,8 +113,21 @@ proc_create(const char *name)
 
 #if OPT_A2
 
+if (firstprocess) {
+	proc->process_id = globalProcessIdNumber;
+	++globalProcessIdNumber;
+	proc->parentProcessPointer = NULL;
+} else {
+	lock_acquire(global_lock);
+	proc->process_id = globalProcessIdNumber;
+	++globalProcessIdNumber;
+	lock_release(global_lock);
+}
+
+
 proc->parentProcessPointer = NULL;
 proc->numberofChildProcess = array_create();
+proc->lock_child = lock_create("lock_child");
 
 
 #endif
@@ -198,7 +213,11 @@ proc_destroy(struct proc *proc)
 	V(proc_count_mutex);
 #endif // UW
 	
+#if OPT_A2
 
+	// lock_destroy(proc->lock_child);
+
+#endif
 }
 
 /*
@@ -207,10 +226,12 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+  firstprocess = true;
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
   }
+  firstprocess = false;
 #ifdef UW
   proc_count = 0;
   proc_count_mutex = sem_create("proc_count_mutex",1);
@@ -225,6 +246,7 @@ proc_bootstrap(void)
 
 #if OPT_A2
 
+global_lock = lock_create("global_lock");
 globalProcessIdNumber = 1;
 
 #endif

@@ -71,11 +71,12 @@ struct proc {
 #endif
 
 	/* add more material here as needed */
-
-
+	
 	pid_t process_id;
 	struct proc *parentProcessPointer;
 	struct array *numberofChildProcess;
+
+	struct lock *lock_child;
 
 };
 
