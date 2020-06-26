@@ -74,6 +74,8 @@ struct semaphore *no_proc_sem;
 #if OPT_A2
 // For global process id
 static volatile pid_t globalProcessIdNumber;
+static struct lock *globallockforprocessid;
+static bool firstprocess;
 
 #endif
 
@@ -111,9 +113,28 @@ proc_create(const char *name)
 
 #if OPT_A2
 
+// For fork
 proc->parentProcessPointer = NULL;
 proc->numberofChildProcess = array_create();
 
+if (firstprocess) {
+	++globalProcessIdNumber;
+	proc->process_id = globalProcessIdNumber;
+	proc->parentProcessPointer = NULL;
+} else {
+	lock_acquire(globallockforprocessid);
+	++globalProcessIdNumber;
+	proc->process_id = globalProcessIdNumber;
+	lock_release(globallockforprocessid);
+}
+
+// For waitpid and exit
+
+proc->terminated = false;
+proc->cv_waitexit = cv_create("cv_waitexit");
+proc->lock_waitexit = lock_create("lock_waitexit");
+proc->code_exit = -1; // Is this correct?
+// proc->zombie = false;
 
 #endif
 
@@ -197,6 +218,49 @@ proc_destroy(struct proc *proc)
 	}
 	V(proc_count_mutex);
 #endif // UW
+
+#if OPT_A2
+	
+	// // proc->parentProcessPointer = NULL;
+	// lock_acquire(proc->lock_waitexit);
+
+	// for (int i = array_num(proc->numberofChildProcess);  i >= 0; i--) {
+	// 	struct proc *children_p = array_get(proc->numberofChildProcess, i);
+	// 	children_p->parentProcessPointer = NULL;
+	// 	if (children_p->terminated == false) {
+	// 		proc_destroy(children_p);
+	// 	}
+	// 	array_remove(proc->numberofChildProcess, i);
+	// }
+
+	// array_destroy(proc->numberofChildProcess);
+	// lock_release(proc->lock_waitexit);
+
+	// // Destroy cv, array, lock and
+	// cv_destroy(proc->cv_waitexit);
+	// lock_destroy(proc->lock_waitexit);
+
+
+	// proc->parentProcessPointer = NULL;
+	lock_acquire(proc->lock_waitexit);
+
+	for (int i = array_num(proc->numberofChildProcess) - 1;  i >= 0; i--) {
+		struct proc *children_p = array_get(proc->numberofChildProcess, i);
+		children_p->parentProcessPointer = NULL;
+		if (children_p->terminated) {
+			proc_destroy(children_p);
+		}
+		array_remove(proc->numberofChildProcess, i);
+	}
+	array_setsize(proc->numberofChildProcess, 0);
+	array_destroy(proc->numberofChildProcess);
+	lock_release(proc->lock_waitexit);
+
+	// Destroy cv, array, lock and
+	lock_destroy(proc->lock_waitexit);
+	cv_destroy(proc->cv_waitexit);
+
+#endif
 	
 
 }
@@ -207,10 +271,12 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+  firstprocess = true;
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
   }
+  firstprocess = false;
 #ifdef UW
   proc_count = 0;
   proc_count_mutex = sem_create("proc_count_mutex",1);
@@ -224,6 +290,8 @@ proc_bootstrap(void)
 #endif // UW 
 
 #if OPT_A2
+
+globallockforprocessid = lock_create("globallockforprocessid");
 
 globalProcessIdNumber = 1;
 
@@ -386,13 +454,5 @@ curproc_setas(struct addrspace *newas)
 	return oldas;
 }
 
-#if OPT_A2
-
-pid_t incrementProcessId(void) {
-	++globalProcessIdNumber;
-	return globalProcessIdNumber;
-}
-
-#endif
 
 

@@ -11,6 +11,7 @@
 #include <copyinout.h>
 #include "opt-A2.h"
 #include <mips/trapframe.h>
+#include <synch.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -21,7 +22,43 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
-  (void)exitcode;
+
+#if OPT_A2
+
+  // if (curproc->parentProcessPointer != NULL) {
+
+  //   curproc->code_exit = _MKWAIT_EXIT(exitcode);
+
+  //   lock_acquire(curproc->lock_waitexit);
+  //   cv_signal(curproc->cv_waitexit, curproc->parentProcessPointer->lock_waitexit);
+  //   lock_release(curproc->lock_waitexit);
+  // }
+
+  if (curproc->parentProcessPointer != NULL) {
+
+
+    lock_acquire(curproc->lock_waitexit);
+    curproc->terminated = true;
+    curproc->code_exit = exitcode;
+    struct proc *temp = NULL;
+
+    for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
+      temp = array_get(curproc->numberofChildProcess, i);
+      temp->parentProcessPointer = NULL;
+      if (temp->terminated) {
+        proc_destroy(temp);
+      }
+      array_remove(curproc->numberofChildProcess, i);
+    }
+    
+    lock_release(curproc->lock_waitexit);
+
+    cv_signal(curproc->cv_waitexit, curproc->parentProcessPointer->lock_waitexit);
+    
+
+  }
+
+#endif
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
@@ -43,7 +80,12 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  proc_destroy(p);
+  
+  // MAYBE WRONG
+
+  // if (p->parentProcessPointer == NULL) {
+    proc_destroy(p);
+  // }  
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
@@ -57,7 +99,13 @@ sys_getpid(pid_t *retval)
 {
   /* for now, this is just a stub that always returns a PID of 1 */
   /* you need to fix this to make it work properly */
-  *retval = 1;
+  
+#if OPT_A2
+
+  *retval = curproc->process_id;
+
+#endif
+
   return(0);
 }
 
@@ -72,20 +120,86 @@ sys_waitpid(pid_t pid,
   int exitstatus;
   int result;
 
-  /* this is just a stub implementation that always reports an
-     exit status of 0, regardless of the actual exit status of
-     the specified process.   
-     In fact, this will return 0 even if the specified process
-     is still running, and even if it never existed in the first place.
-
-     Fix this!
-  */
-
   if (options != 0) {
     return(EINVAL);
   }
+
+#if OPT_A2
+
+
+//   lock_acquire(curproc->lock_waitexit);
+//   bool child_exists = false;
+
+//   for (unsigned int i = 0; i < array_num(curproc->numberofChildProcess); i++) {
+//     struct proc *childp = array_get(curproc->numberofChildProcess, i);
+//     if (childp->process_id == pid) {
+
+//       child_exists = true;
+//       // lock_acquire(childp->lock_waitexit);
+//       while (childp->terminated == false) {
+//         cv_wait(childp->cv_waitexit, curproc->lock_waitexit);        
+//       }
+//       // lock_release(childp->lock_waitexit);
+//       exitstatus = _MKWAIT_EXIT(childp->code_exit);
+//     }
+//   } 
+
+//   if (!child_exists) {
+//     // No child process with this PID exists for the curthread
+//     lock_release(curproc->lock_waitexit);
+//     *retval = -1;
+//     return ESRCH;
+//   }
+
+//   lock_release(curproc->lock_waitexit);
+
+
+
+
+
+
+
+  lock_acquire(curproc->lock_waitexit);
+  bool child_exists = false;
+
+  struct proc *childp = NULL;
+
+  for (int i = array_num(curproc->numberofChildProcess) - 1; i >= 0; i--) {
+    childp =  array_get(curproc->numberofChildProcess, i);
+    
+    if (childp->process_id == pid) {
+      child_exists = true;
+      break;
+    }
+  } 
+
+  if (!child_exists) {
+    // No child process with this PID exists for the curthread
+    lock_release(curproc->lock_waitexit);
+    *retval = -1;
+    return ESRCH;
+  }
+
+
+  while (childp->terminated == false) {
+    cv_wait(childp->cv_waitexit, curproc->lock_waitexit);        
+  }
+
+  exitstatus = _MKWAIT_EXIT(childp->code_exit);
+
+
+
+  lock_release(curproc->lock_waitexit);
+
+
+
+
+
+
+#endif
+
   /* for now, just pretend the exitstatus is 0 */
-  exitstatus = 0;
+  // exitstatus = 0;
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
     return(result);
@@ -94,6 +208,9 @@ sys_waitpid(pid_t pid,
   return(0);
 }
 
+
+// ****************************************************************
+// FORK
 #if OPT_A2
 
 int sys_fork(struct trapframe *tf, pid_t *retval) {
@@ -116,30 +233,30 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   }
 
   // Now attach this address space to the this child
-  spinlock_acquire(&childProcess->p_lock);
+  lock_acquire(curproc->lock_waitexit);
 	childProcess->p_addrspace = childAddrspace;
 	
-  // Assign PID;
-  pid_t a = incrementProcessId();
-  childProcess->process_id = a;
+  // Assign exitcode
+  //childProcess->code_exit = -1;
 
   // Assigning parent process pointer
   childProcess->parentProcessPointer = curproc;
   
-  // Adding this child process to the parent's prcoess child array
-  array_add(childProcess->numberofChildProcess, childProcess, NULL);
+  // Adding this child process to the parent's process child  
+  int is_error = array_add(curproc->numberofChildProcess, childProcess, NULL);
+  if(is_error) panic("Unable to copy child");
 
-  spinlock_release(&childProcess->p_lock);
+  lock_release(curproc->lock_waitexit);
+
 
   struct trapframe *child_tf = kmalloc(sizeof(struct trapframe));
   memcpy(child_tf, tf, sizeof(struct trapframe));
 
-
-  thread_fork("childProcessThread", childProcess, (void *)&enter_forked_process, child_tf, 0);
-
+  thread_fork(curproc->p_name, childProcess, (void *)&enter_forked_process, child_tf, 0);
   *retval = childProcess->process_id;
-  return 0;
 
+  return 0;
 }
+
 
 #endif

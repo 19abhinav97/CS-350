@@ -72,11 +72,17 @@ struct proc {
 
 	/* add more material here as needed */
 
-
+	// For fork
 	pid_t process_id;
 	struct proc *parentProcessPointer;
 	struct array *numberofChildProcess;
 
+	// For waitpid and exit
+	bool terminated;
+	struct cv *cv_waitexit;
+	struct lock *lock_waitexit;
+	int code_exit;
+	// bool zombie;
 };
 
 

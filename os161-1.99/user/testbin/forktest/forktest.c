@@ -111,7 +111,6 @@ dowait(int nowait, int pid)
 		/* in the fork in question we were the child; exit */
 		exit(0);
 	}
-
 	if (!nowait) {
 		if (waitpid(pid, &x, 0)<0) {
 			warn("waitpid");
