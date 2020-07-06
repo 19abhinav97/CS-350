@@ -80,6 +80,7 @@ static bool firstprocess;
 #endif
 
 /*
+ *
  * Create a proc structure.
  */
 static
