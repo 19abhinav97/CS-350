@@ -50,6 +50,8 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <array.h>
+#include "opt-A2.h"
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -69,7 +71,13 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
+// For global process id
+static volatile pid_t globalProcessIdNumber;
+static struct lock *global_lock;
+static bool firstprocess;
 
+#endif
 
 /*
  * Create a proc structure.
@@ -102,6 +110,26 @@ proc_create(const char *name)
 #ifdef UW
 	proc->console = NULL;
 #endif // UW
+
+#if OPT_A2
+
+if (firstprocess) {
+	proc->process_id = globalProcessIdNumber;
+	++globalProcessIdNumber;
+} else {
+	lock_acquire(global_lock);
+	proc->process_id = globalProcessIdNumber;
+	++globalProcessIdNumber;
+	lock_release(global_lock);
+}
+
+proc->parentProcessPointer = NULL;
+proc->numberofChildProcess = array_create();
+proc->lock_child = lock_create("lock_child");
+proc->cv_child = cv_create("cv_child");
+proc->process_terminated = false;
+
+#endif
 
 	return proc;
 }
@@ -136,7 +164,6 @@ proc_destroy(struct proc *proc)
 		proc->p_cwd = NULL;
 	}
 
-
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here
 	if (proc->p_addrspace) {
 		/*
@@ -163,11 +190,35 @@ proc_destroy(struct proc *proc)
 	}
 #endif // UW
 
+#if OPT_A2
+	
+	lock_acquire(proc->lock_child);
+	struct proc *children_p = NULL;
+	struct array *proc_children = proc->numberofChildProcess;
+	int size_array = array_num(proc_children);
+	for (int i = size_array - 1;  i >= 0; i--) {
+		children_p = array_get(proc_children, i);
+		if (children_p->process_terminated) {
+			proc_destroy(children_p);
+		}
+		children_p->parentProcessPointer = NULL;
+		array_remove(proc_children, i);
+	}
+	array_destroy(proc_children);
+	lock_release(proc->lock_child);
+
+	// Destroy cv, array, lock and
+	cv_destroy(proc->cv_child);
+	lock_destroy(proc->lock_child);
+
+#endif
+
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
 	kfree(proc->p_name);
 	kfree(proc);
+
 
 #ifdef UW
 	/* decrement the process count */
@@ -185,6 +236,7 @@ proc_destroy(struct proc *proc)
 #endif // UW
 	
 
+
 }
 
 /*
@@ -193,10 +245,18 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+#if OPT_A2
+  firstprocess = true;
+#endif
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
   }
+#if OPT_A2
+  firstprocess = false;
+#endif
+
 #ifdef UW
   proc_count = 0;
   proc_count_mutex = sem_create("proc_count_mutex",1);
@@ -208,6 +268,14 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
+#if OPT_A2
+
+global_lock = lock_create("global_lock");
+globalProcessIdNumber = 1;
+
+#endif
+
 }
 
 /*
@@ -364,3 +432,14 @@ curproc_setas(struct addrspace *newas)
 	spinlock_release(&proc->p_lock);
 	return oldas;
 }
+
+#if OPT_A2
+
+pid_t incrementProcessId(void) {
+	++globalProcessIdNumber;
+	return globalProcessIdNumber;
+}
+
+#endif
+
+

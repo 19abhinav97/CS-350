@@ -38,6 +38,8 @@
 
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
+#include <array.h>
+#include "opt-A2.h"
 
 struct addrspace;
 struct vnode;
@@ -69,7 +71,19 @@ struct proc {
 #endif
 
 	/* add more material here as needed */
+	
+	pid_t process_id;
+	struct proc *parentProcessPointer;
+	struct array *numberofChildProcess;
+	struct lock *lock_child;
+	struct cv *cv_child;
+	bool process_terminated;
+	int exit_code;
+
+
 };
+
+
 
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
@@ -102,3 +116,9 @@ struct addrspace *curproc_setas(struct addrspace *);
 
 
 #endif /* _PROC_H_ */
+
+#if OPT_A2
+
+pid_t incrementProcessId(void);
+
+#endif
