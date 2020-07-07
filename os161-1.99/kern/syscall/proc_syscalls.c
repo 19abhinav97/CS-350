@@ -12,6 +12,9 @@
 #include "opt-A2.h"
 #include <mips/trapframe.h>
 #include <synch.h>
+#include <vfs.h>
+#include <vm.h>
+#include <kern/fcntl.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -239,6 +242,90 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
   *retval = childProcess->process_id;
 
   return 0;
+}
+
+
+
+
+// Execv
+
+int
+sys_execv(const char *program, char **args) {
+
+   (void) args; // change this later
+
+// runprogram start
+
+  struct addrspace *as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+
+  // For program into Kernel Stack
+
+  char * program_kernel = kmalloc((strlen(program) + 1) * sizeof(char));
+  if (program_kernel == NULL) {
+    return ENOMEM;
+  }
+
+  int copy_ans = copyin((const_userptr_t) program,  (void *) program_kernel, (strlen(program) + 1) * sizeof(char));
+  
+  // kprintf(program_kernel);
+
+  // Add error statement
+  if (copy_ans != 0) {
+    return EIO;
+  }
+
+	/* Open the file. */
+	result = vfs_open(program_kernel, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+
+	/* We should be a new process. */
+	// KASSERT(curproc_getas() == NULL);
+
+	/* Create a new address space. */
+	as = as_create();
+	if (as ==NULL) {
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	/* Switch to it and activate it. */
+	curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(as, &stackptr);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		return result;
+	}
+
+	/* Warp to user mode. */
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+
+// runprogram finish
+
+
 }
 
 #endif
