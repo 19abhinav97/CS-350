@@ -287,7 +287,7 @@ sys_execv(const char *program, char **args) {
 
   // kprintf("Value is %d\n", number_args);
 
-  char ** argument_in_kernel = kmalloc( (number_args + 1) * sizeof(char *) );
+  char ** argument_in_kernel = kmalloc( (number_args + 1) * 128 );
 
 
   for (int argument = 0; argument < number_args; argument++) {
