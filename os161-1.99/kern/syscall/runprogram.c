@@ -107,6 +107,8 @@ runprogram(char *progname, int nargs, char ** args)
         copyout((const_userptr_t) args[argument], (void *) stackptr, sizeof(char) * (strlen(args[argument]) + 1) );
     }
 	array_set(pointers, nargs, (void*)NULL);
+
+	// kprintf("VAAAAA = %d\n", nargs);
     
     stackptr = stackptr - sizeof(vaddr_t);
 	

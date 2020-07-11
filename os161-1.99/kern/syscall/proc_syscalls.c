@@ -252,7 +252,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 int
 sys_execv(const char *program, char **args) {
 
-   (void) args; // change this later
+  //  (void) args; // change this later
 
 // runprogram start
 
@@ -276,6 +276,33 @@ sys_execv(const char *program, char **args) {
   if (copy_ans != 0) {
     return EIO;
   }
+
+  // Count and copy into kernel Address Space
+
+  int number_args = 0;
+
+  for (int argument = 0; args[argument] != NULL; argument++) {
+    number_args = number_args + 1;
+  }
+
+  // kprintf("Value is %d\n", number_args);
+
+  char ** argument_in_kernel = kmalloc( (number_args + 1) * sizeof(char *) );
+
+
+  for (int argument = 0; argument < number_args; argument++) {
+      argument_in_kernel[argument] = kmalloc( (strlen(args[argument]) + 1) * sizeof(char) );
+      copyin((const_userptr_t) args[argument], (void *) argument_in_kernel[argument], (strlen(args[argument]) + 1) * sizeof(char) );
+  }
+
+  argument_in_kernel[number_args] = NULL;
+
+  // kprintf("String value is = %s\n", argument_in_kernel[0]);
+  // kprintf("String value is = %s\n", argument_in_kernel[1]);
+  // kprintf("String value is = %s\n", argument_in_kernel[2]);
+  // kprintf("String value is = %s\n", argument_in_kernel[3]);
+
+  
 
 	/* Open the file. */
 	result = vfs_open(program_kernel, O_RDONLY, 0, &v);
@@ -315,9 +342,44 @@ sys_execv(const char *program, char **args) {
 		return result;
 	}
 
-	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  stackptr, entrypoint);
+  // kprintf("After the saving 1\n");
+
+  struct array* pointers = array_create();
+	array_setsize(pointers, number_args + 1);
+
+  // kprintf("After the saving 2\n");
+
+    
+  for (int argument = number_args - 1; argument >= 0; argument--) {
+    stackptr = stackptr - (strlen(argument_in_kernel[argument]) * sizeof(char) + 1);
+		array_set(pointers, argument, (void*) stackptr);
+    copyout((const_userptr_t) argument_in_kernel[argument], (void *) stackptr, sizeof(char) * (strlen(argument_in_kernel[argument]) + 1) );
+  }
+	
+  // kprintf("After the saving 3\n");
+
+
+  array_set(pointers, number_args, (void*)NULL);
+    
+  stackptr = stackptr - sizeof(vaddr_t);
+	
+	int val = stackptr%8;
+	
+  stackptr-= val;
+
+  // kprintf("After the saving 4\n");
+
+
+  for (int j = number_args; j >= 0; j--) {
+    stackptr = stackptr - sizeof(vaddr_t);
+		vaddr_t temp = (vaddr_t) array_get(pointers, j);
+    copyout((const_userptr_t) &temp, (userptr_t) stackptr, sizeof(vaddr_t));
+  }
+ 
+  // kprintf("I am in the end");
+
+  /* Warp to user mode. */
+  enter_new_process(number_args, (userptr_t) stackptr, ROUNDUP(stackptr,8), entrypoint);
 	
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
