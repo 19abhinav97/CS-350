@@ -139,6 +139,10 @@ syscall(struct trapframe *tf)
       err = sys_fork(tf, (pid_t *) &retval);  // Change retval type later
       break;
 
+	case SYS_execv:
+		err = sys_execv((char *) tf->tf_a0, (char **)tf->tf_a1); // Fill this later
+		break;
+
 #endif
 
  
