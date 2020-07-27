@@ -37,6 +37,7 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
+#include "opt-A3.h"
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -200,9 +201,23 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return 0;
 	}
 
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
+	ehi = faultaddress;
+	elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+
+#if OPT_A3
+
+	tlb_random(ehi, elo);
 	splx(spl);
-	return EFAULT;
+
+	return 0;
+
+// #else
+
+// 	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
+// 	splx(spl);
+// 	return EFAULT;
+
+#endif
 }
 
 struct addrspace *
