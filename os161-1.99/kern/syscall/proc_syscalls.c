@@ -321,7 +321,7 @@ sys_execv(const char *program, char **args) {
 	}
 
 	/* Switch to it and activate it. */
-	curproc_setas(as);
+	struct addrspace *oldAddressSpace = curproc_setas(as);
 	as_activate();
 
 	/* Load the executable. */
@@ -377,8 +377,15 @@ sys_execv(const char *program, char **args) {
   }
  
   // kprintf("I am in the end");
+  as_destroy(oldAddressSpace);
 
   // ADD KFREE LATER HERE
+  kfree(program_kernel);
+  
+  for (int i = 0; i <= number_args; i++) {
+    kfree(argument_in_kernel[i]);
+  }
+  kfree(argument_in_kernel);
 
   /* Warp to user mode. */
   enter_new_process(number_args, (userptr_t) stackptr, ROUNDUP(stackptr,8), entrypoint);
